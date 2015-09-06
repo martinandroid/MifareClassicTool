@@ -169,7 +169,7 @@ public class Common extends Application {
 
     /**
      * 1 if the device does support Mifare Classic. -1 if it doesn't support
-     * it. 0 if the support check was not yet performt.
+     * it. 0 if the support check was not yet performed.
      * Checking for Mifare Classic support is really expensive. Therefore
      * remember the result here.
      */
@@ -476,11 +476,12 @@ public class Common extends Application {
 
     /**
      * For Activities which want to treat new Intents as Intents with a new
-     * Tag attached. If the given Intent has a Tag extra, the
-     * {@link #mTag} and {@link #mUID} will be updated and a Toast
-     * message will be shown in the calling Context (Activity).
-     * This method will also check if the device/tag supports Mifare Classic
-     * (see return values and {@link #checkMifareClassicSupport(Tag, Context)}).
+     * Tag attached. If the given Intent has a Tag extra, it will be patched
+     * by {@link MCReader#patchTag(Tag)} and  {@link #mTag} as well as
+     * {@link #mUID} will be updated. A Toast message will be shown in the
+     * Context of the calling Activity. This method will also check if the
+     * device/tag supports Mifare Classic (see return values and
+     * {@link #checkMifareClassicSupport(Tag, Context)}).
      * @param intent The Intent which should be checked for a new Tag.
      * @param context The Context in which the Toast will be shown.
      * @return
@@ -499,6 +500,7 @@ public class Common extends Application {
         // Check if Intent has a NFC Tag.
         if (NfcAdapter.ACTION_TECH_DISCOVERED.equals(intent.getAction())) {
             Tag tag = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
+            tag = MCReader.patchTag(tag);
             setTag(tag);
 
             // Show Toast message with UID.
@@ -514,10 +516,12 @@ public class Common extends Application {
 
     /**
      * Check if the device supports the Mifare Classic technology.
-     * In order to do so, check if there are NFC libs with "brcm" in their
-     * names. "brcm" libs are for devices with Broadcom chips. Broadcom chips
-     * don't support Mifare Classic
+     * In order to do so, check if there are files like "/dev/bcm2079x-i2c" or
+     * "/system/lib/libnfc-bcrm*". Files like these are indicators for a
+     * NFC controller manufactured by Broadcom. Broadcom chips don't support
+     * Mifare Classic.
      * @return True if the device supports Mifare Classic. False otherwise.
+     * @see #mHasMifareClassicSupport
      */
     public static boolean hasMifareClassicSupport() {
         if (mHasMifareClassicSupport != 0) {
@@ -536,15 +540,36 @@ public class Common extends Application {
         }
         */
 
+        // Check if there is the NFC device "bcm2079x-i2c".
+        // Chips by Broadcom don't support Mifare Classic.
+        // This could fail because on a lot of devices apps don't have
+        // the sufficient permissions.
+        File device = new File("/dev/bcm2079x-i2c");
+        if (device.exists()) {
+            mHasMifareClassicSupport = -1;
+            return false;
+        }
+
+        // Check if there is the NFC device "pn544".
+        // The PN544 NFC chip is manufactured by NXP.
+        // Chips by NXP support Mifare Classic.
+        device = new File("/dev/pn544");
+        if (device.exists()) {
+            mHasMifareClassicSupport = 1;
+            return true;
+        }
+
         // Check if there are NFC libs with "brcm" in their names.
         // "brcm" libs are for devices with Broadcom chips. Broadcom chips
-        // don't support Mifare Classic
+        // don't support Mifare Classic.
         File libsFolder = new File("/system/lib");
         File[] libs = libsFolder.listFiles();
         for (File lib : libs) {
             if (lib.isFile()
                     && lib.getName().startsWith("libnfc")
-                    && lib.getName().contains("brcm")) {
+                    && lib.getName().contains("brcm")
+                    // Add here other non NXP NFC libraries.
+                    ) {
                 mHasMifareClassicSupport = -1;
                 return false;
             }
@@ -599,7 +624,8 @@ public class Common extends Application {
                      atqa[0] == 2 || atqa[0] == (byte)0x42)) {
                 // ATQA says it is most likely a Mifare Classic tag.
                 byte sak = (byte)nfca.getSak();
-                if (sak == 8 || sak == 9 || sak == (byte)0x18) {
+                if (sak == 8 || sak == 9 || sak == (byte)0x18 ||
+                                            sak == (byte)0x88) {
                     // SAK says it is most likely a Mifare Classic tag.
                     // --> Device does not support Mifare Classic.
                     return -1;

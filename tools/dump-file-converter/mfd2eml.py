@@ -1,8 +1,9 @@
-#!/bin/bash
-
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
 ########################################################################
 #
-# Copyright 2013 Gerhard Klostermeier
+# Copyright 2015 Gerhard Klostermeier
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,25 +19,33 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 ########################################################################
-#
-# Usage: ./mct-dump2raw-dump.sh <dumpFile>
-#
-########################################################################
-#
-# Info:
-# - You have to install "perl"!
-# - "dumpFile" must be like "example-dump-file.txt"
-# - "dumpFile" must be complete (e.g. sectors 0-15)
-# - For more information see the README-mct-dump2raw-dump.txt
-#
-#########################################################################
+
+from sys import exit, argv
+from binascii import hexlify
 
 
-sc=$(sed -n '/^\+.*$/p' ${1:?no dump file given} | wc -l)
-# Rough check if dump file is complete (consists of 5/16/32/40 sectors).
-if [ $sc -eq 5 -o $sc -eq 16 -o $sc -eq 32 -o $sc -eq 40 ]
-then
-    sed '/^\+.*$/d' $1 | perl -ne 's/([0-9a-f]{2})/print chr hex $1/gie'
-else
-    echo "Not a (complete) dump."
-fi
+def main():
+  """ Convert a .mfd file (MiFare Drump) to a .eml file (Proxmark3 emulator). """
+  # Are there enouth arguments?
+  if len(argv) is not 3:
+    usage()
+
+  # Convert the file line by line.
+  with open(argv[1], 'rb') as mfdFile, open(argv[2], 'w') as emlFile:
+    while True:
+      bytes = mfdFile.read(16)
+      if not bytes:
+        break
+      chars = hexlify(bytes).decode('UTF-8')
+      emlFile.write(chars + '\n')
+
+
+def usage():
+  """ Print the usage. """
+  print('Usage: ' + argv[0] + ' <mfd-file> <output-file-(eml)>')
+  exit(1);
+
+
+if __name__ == '__main__':
+    main()
+
